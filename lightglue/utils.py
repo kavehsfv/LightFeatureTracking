@@ -127,6 +127,31 @@ def load_image(path: Path, resize: int = None, **kwargs) -> torch.Tensor:
         image, _ = resize_image(image, resize, **kwargs)
     return numpy_image_to_torch(image)
 
+def load_image_crop(path: Path, resize: Optional[Union[int, Tuple[int, int]]] = None, crop: Optional[Tuple[int, int, int, int]] = None, **kwargs) -> torch.Tensor:
+    image = read_image(path)
+
+    # Crop the image if a crop section is provided
+    if crop is not None:
+        x1, y1, x2, y2 = crop
+        image = image[y1:y2, x1:x2]
+
+    if resize is not None:
+        image, _ = resize_image(image, resize, **kwargs)
+
+    return numpy_image_to_torch(image)
+
+def load_data_image_crop(path: Path, resize: Optional[Union[int, Tuple[int, int]]] = None, crop: Optional[Tuple[int, int, int, int]] = None, **kwargs) -> torch.Tensor:
+    image = read_image(path)
+
+    # Crop the image if a crop section is provided
+    if crop is not None:
+        x1, y1, x2, y2 = crop
+        image = image[y1:y2, x1:x2]
+
+    if resize is not None:
+        image, _ = resize_image(image, resize, **kwargs)
+
+    return numpy_image_to_torch(image)
 
 class Extractor(torch.nn.Module):
     def __init__(self, **conf):
