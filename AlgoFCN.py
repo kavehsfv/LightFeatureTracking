@@ -22,16 +22,25 @@ class FeatureTracker:
         self.track_id = 0
         self.prev_keypoints = None
         self.prev_feats = None
-        self.kpMvmt = {}
+        self.kpMvmt = 0
+        self.last_cropCoords = (0, 0, 0, 0)
 
     def detect_features(self, frame):
         feats = self.extractor.extract(frame.to(self.device))
         feats_rbd = rbd(copy.deepcopy(feats))
         keypoints = feats_rbd["keypoints"].cpu()
         return keypoints, feats
-    
-    def process_frame(self, frameData, crnt_frm_idx):
-        frame = FNCs.load_data_image_crop(frameData, crop=(0, 0, 1024, 480))
+
+    def process_frame(self, frameData, crnt_frm_idx, cropCoords):
+        cropCoords =(cropCoords[0], cropCoords[1], cropCoords[2], cropCoords[3])
+
+        # # Check if cropCoords has changed since the last frame processed
+        # if cropCoords != self.last_cropCoords:
+        #     self.tracks = {}  # Reset tracks
+        #     self.track_id = 0  # Reset track_id as well, assuming you're starting fresh with tracking
+        #     self.last_cropCoords = cropCoords  # Update last_cropCoords to the current one
+
+        frame = FNCs.load_data_image_crop(frameData, crop=cropCoords)
         keypoints, feats = self.detect_features(frame)
         # Convert keypoints to integers
         keypoints = keypoints.round().to(torch.int)
@@ -57,7 +66,7 @@ class FeatureTracker:
 
             # Compute movement statistics
             avg_change = differences_np.mean(axis=0)
-            self.kpMvmt[crnt_frm_idx] = avg_change
+            self.kpMvmt = avg_change[1]
 
             m_kpts0, m_kpts1 = m_kpts0.tolist(), m_kpts1.tolist()
             # Update tracks with matched features

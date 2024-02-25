@@ -3,7 +3,12 @@
 /lightglue/weights/
 *-checkpoint.ipynb
 *.pth
+*.avi
+*.tiff
 /.conda/
+/assets/exp1/
+/assets/exp2/
+/assets/img_horse/
 /CNT_Imgs/
 # Byte-compiled / optimized / DLL files
 __pycache__/
