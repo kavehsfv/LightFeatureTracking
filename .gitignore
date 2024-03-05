@@ -14,7 +14,8 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
+*.mp4
+*.avi
 # C extensions
 *.so
 

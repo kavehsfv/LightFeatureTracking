@@ -2,7 +2,6 @@
 import cv2
 import numpy as np
 import torch
-from PyQt5.QtCore import Qt, pyqtSlot, QByteArray
 from typing import Callable, List, Optional, Tuple, Union
 
 def get_key_by_value(my_dict, search_value):
@@ -64,15 +63,3 @@ def load_data_image_crop(image_data: bytes, resize: Optional[Union[int, Tuple[in
     # Convert the NumPy array to a torch.Tensor
     return numpy_image_to_torch(image_array)
 
-def bytes_to_cvFrame(frame_bytes):
-    # Convert QByteArray to bytes if not already in this format
-    if isinstance(frame_bytes, QByteArray):
-        frame_bytes = frame_bytes.data()
-    
-    # Convert the bytes to a NumPy array
-    np_arr = np.frombuffer(frame_bytes, np.uint8)
-    
-    # Decode the NumPy array into an image
-    cvFrame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-    
-    return cvFrame

@@ -1,5 +1,5 @@
 # Function to detect and compute features using your custom extractor
-from lightglue import LightGlue, SuperPoint, DISK, ALIKED
+from lightglue import LightGlue, SuperPoint, DISK, ALIKED, SIFT
 from lightglue.utils import load_image_crop, rbd, load_image, read_image
 from lightglue import viz2d
 import torch
@@ -13,10 +13,12 @@ import FNCs
 import colorsys
 
 class FeatureTracker:
-    def __init__(self, device=None):
+    def __init__(self, ftExtractor = 'aliked', mx_keypoints = 1024, desired_device = 3, device=None):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if device is None else device
-        self.extractor = ALIKED(max_num_keypoints=1024).eval().to(self.device)
-        self.matcher = LightGlue(features="aliked").eval().to(self.device)
+        # self.extractor = ALIKED(max_num_keypoints=1024).eval().to(self.device)
+        # self.matcher = LightGlue(features="aliked").eval().to(self.device)
+        self.extractor, self.matcher = self.set_extractor_matcher(ftExtractor, mx_keypoints)
+
         self.tracks = {}
         self.keyp_trackId_dic = {}
         self.global_keyp_trackId_dic = {}
@@ -29,7 +31,7 @@ class FeatureTracker:
     def detect_features(self, frame):
         feats = self.extractor.extract(frame.to(self.device))
         feats_rbd = rbd(copy.deepcopy(feats))
-        keypoints = feats_rbd["keypoints"].cpu()
+        keypoints = feats_rbd["keypoints"]
         return keypoints, feats
 
     def process_frame(self, frameData, crnt_frm_idx, cropCoords):
@@ -118,8 +120,7 @@ class FeatureTracker:
 
     def process_frame__retive(self, frameData, crnt_frm_idx, cropCoords, isOnline):
 
-        cropCoords =(cropCoords[0], cropCoords[1], cropCoords[2], cropCoords[3])
-
+        cropCoords = tuple(cropCoords)
         if isOnline:
             frame = FNCs.load_data_image_crop(frameData, crop=cropCoords)
         else:
@@ -128,6 +129,7 @@ class FeatureTracker:
         keypoints, feats = self.detect_features(frame)
         # Convert keypoints to integers
         keypoints = keypoints.round().to(torch.int)
+        _frmTracks = []
 
         if crnt_frm_idx == 0:
             # Initialize tracks with the first frame's keypoint
@@ -136,6 +138,7 @@ class FeatureTracker:
                 self.tracks[self.track_id] = [(crnt_frm_idx, tuple(kp))]
                 # self.keyp_trackId_dic[(crnt_frm_idx, tuple(kp))] = self.track_id
                 self.global_keyp_trackId_dic[tuple(kp)] = self.track_id
+                _frmTracks.append(self.track_id)
                 self.track_id += 1
         else:
             # Match features with the previous frame
@@ -156,21 +159,17 @@ class FeatureTracker:
             for match_idx, (prev_kp_idx, current_kp_idx) in enumerate(matches):
 
                 prev_kp = self.prev_keypoints[prev_kp_idx].tolist()  # Convert to tuple to use as dictionary key
-
                 current_kp = keypoints[current_kp_idx].tolist() # Matched keypoint in the current frame
 
                 # _track_id_idx = self.keyp_trackId_dic.get((crnt_frm_idx-1, tuple(prev_kp)), None)
 
                 _track_id_idx = self.global_keyp_trackId_dic.get(tuple(prev_kp), None)
-
                 if (_track_id_idx is not None):
                     self.tracks[_track_id_idx].append((crnt_frm_idx, tuple(current_kp)))
-
                     # FNCs.replace_key(self.keyp_trackId_dic, (crnt_frm_idx-1, tuple(prev_kp)),
-
                     #                             (crnt_frm_idx, tuple(current_kp)))
                     _new_keyp_trackId_dic[tuple(current_kp)] = _track_id_idx                
-
+                    _frmTracks.append(_track_id_idx)
                 else:
                     print(self.track_id, crnt_frm_idx-1, tuple(prev_kp), "track id not found")
 
@@ -180,11 +179,8 @@ class FeatureTracker:
             for nmkp in notMatchKPs1:
 
                 self.tracks[self.track_id] = [(crnt_frm_idx, tuple(nmkp))]
-
                 # self.keyp_trackId_dic[(crnt_frm_idx, tuple(nmkp))] = self.track_id
-
                 _new_keyp_trackId_dic[tuple(nmkp)] = self.track_id
-
                 self.track_id += 1
             
             matched_indices0 = set(matches[..., 0].tolist())
@@ -197,14 +193,26 @@ class FeatureTracker:
             self.global_keyp_trackId_dic = _new_keyp_trackId_dic
         
         self.prev_keypoints, self.prev_feats = keypoints, feats
+        return self.tracks, self.kpMvmt, image_cv2, _frmTracks
 
-        return self.tracks, self.kpMvmt
+    def update_cvFrame(self, _cpTracks, _frameData, _frmTrackIds, desRec, _isOnline = False):
 
-    def update_cvFrame(self, _cpTracks, _frameData, _crnt_frm_idx):
-
-        _cvFrame = cv2.imdecode(np.frombuffer(_frameData, np.uint8), cv2.IMREAD_COLOR)
+        _cvFrame = _frameData
+        if _isOnline:
+            _cvFrame = cv2.imdecode(np.frombuffer(_frameData, np.uint8), cv2.IMREAD_COLOR)
         # First, filter out tracks with less than 3 keypoints to avoid modifying the dictionary during iteration
-
+        
+        for i, trackId in enumerate(_frmTrackIds):
+            frm_keypoints = _cpTracks[trackId]        
+            # for idx, (frm, keypoint) in enumerate(frm_keypoints):
+            for idx in range(len(frm_keypoints)):
+                if idx == len(frm_keypoints)-1:
+                    cv2.circle(_cvFrame, frm_keypoints[idx][1], 5, (255, 0, 0), -1)
+                else:
+                    cv2.line(_cvFrame, frm_keypoints[idx][1], frm_keypoints[idx+1][1], (0, 255, 0), 2)
+            # print(idx)
+            # for idp, _ , _ in enumerate(cp)
+        return _cvFrame
         _cpTracks = {key: value for key, value in _cpTracks.items() if len(value) >= 3}
         # Now, process the tracks for drawing
         for _track_id, _keypoints in _cpTracks.items():
@@ -219,7 +227,7 @@ class FeatureTracker:
             for f, point in _keypoints:
                 if f == _crnt_frm_idx:  # Check if the keypoint belongs to the current frame
                     cv2.circle(_cvFrame, point, 5, (0, 255, 0), -1)  # Draw the keypoint
-                    
+
             # Draw lines between keypoints of the same track
             for kp_idx in range(1, len(_keypoints)):
                 f, point = _keypoints[kp_idx]
@@ -230,6 +238,28 @@ class FeatureTracker:
 
         return _cvFrame
 
+    def set_extractor_matcher(self, ftExtractor, mx_keypoints):
+        extractor, matcher = None, None
+        if ftExtractor == 'aliked':
+            extractor = ALIKED(max_num_keypoints=mx_keypoints).eval().to(self.device)
+            matcher = LightGlue(features=ftExtractor).eval().to(self.device)
+
+        elif ftExtractor == 'superpoint':
+            extractor = SuperPoint(max_num_keypoints=mx_keypoints).eval().to(self.device)
+            matcher = LightGlue(features=ftExtractor).eval().to(self.device)
+
+        elif ftExtractor == 'disk':
+            extractor = DISK(max_num_keypoints=mx_keypoints).eval().to(self.device)
+            matcher = LightGlue(features=ftExtractor).eval().to(self.device)
+
+        elif ftExtractor == 'sift':
+            extractor = SIFT(max_num_keypoints=mx_keypoints).eval().to(self.device)
+            matcher = LightGlue(features=ftExtractor).eval().to(self.device)
+
+        else:
+            raise RuntimeError("Invalid feature extractor. Please use 'aliked' or 'superpoint'.")
+        
+        return extractor, matcher
 
 #*******************
 ######################

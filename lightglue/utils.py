@@ -129,7 +129,7 @@ def load_image(path: Path, resize: int = None, **kwargs) -> torch.Tensor:
 
 def load_image_crop(path: Path, resize: Optional[Union[int, Tuple[int, int]]] = None, crop: Optional[Tuple[int, int, int, int]] = None, **kwargs) -> torch.Tensor:
     image = read_image(path)
-
+    imageCV = image
     # Crop the image if a crop section is provided
     if crop is not None:
         x1, y1, x2, y2 = crop
@@ -138,7 +138,7 @@ def load_image_crop(path: Path, resize: Optional[Union[int, Tuple[int, int]]] = 
     if resize is not None:
         image, _ = resize_image(image, resize, **kwargs)
 
-    return numpy_image_to_torch(image)
+    return numpy_image_to_torch(image), imageCV[..., ::-1]
 
 def load_data_image_crop(path: Path, resize: Optional[Union[int, Tuple[int, int]]] = None, crop: Optional[Tuple[int, int, int, int]] = None, **kwargs) -> torch.Tensor:
     image = read_image(path)
