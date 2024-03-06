@@ -11,6 +11,7 @@ import cv2
 import time
 import FNCs
 import colorsys
+import sys
 
 class FeatureTracker:
     def __init__(self, ftExtractor = 'aliked', mx_keypoints = 1024, desired_device = 3, device=None):
@@ -18,6 +19,7 @@ class FeatureTracker:
         # self.extractor = ALIKED(max_num_keypoints=1024).eval().to(self.device)
         # self.matcher = LightGlue(features="aliked").eval().to(self.device)
         self.extractor, self.matcher = self.set_extractor_matcher(ftExtractor, mx_keypoints)
+        self.frame_keypoints = {}
 
         self.tracks = {}
         self.keyp_trackId_dic = {}
@@ -27,6 +29,7 @@ class FeatureTracker:
         self.prev_feats = None
         self.kpMvmt = 0
         self.last_cropCoords = (0, 0, 0, 0)
+        self.trackColors = self.generate_distinct_colors(40)
 
     def detect_features(self, frame):
         feats = self.extractor.extract(frame.to(self.device))
@@ -34,7 +37,7 @@ class FeatureTracker:
         keypoints = feats_rbd["keypoints"]
         return keypoints, feats
 
-    def process_frame(self, frameData, crnt_frm_idx, cropCoords):
+    def process_frame__old(self, frameData, crnt_frm_idx, cropCoords):
         cropCoords =(cropCoords[0], cropCoords[1], cropCoords[2], cropCoords[3])
 
         # # Check if cropCoords has changed since the last frame processed
@@ -106,7 +109,7 @@ class FeatureTracker:
 
         return self.tracks, self.kpMvmt
 
-    def generate_distinct_colors(n):
+    def generate_distinct_colors(self, n):
         colors = []
         for i in range(n):
             hue = i / n
@@ -118,8 +121,9 @@ class FeatureTracker:
             colors.append(rgb_255)
         return colors
 
-    def process_frame__retive(self, frameData, crnt_frm_idx, cropCoords, isOnline):
-
+    def process_frame(self, frameData, crnt_frm_idx, cropCoords, isOnline):
+        if cropCoords == None:
+            cropCoords = (0, 0, 100000, 100000)
         cropCoords = tuple(cropCoords)
         if isOnline:
             frame = FNCs.load_data_image_crop(frameData, crop=cropCoords)
@@ -130,6 +134,7 @@ class FeatureTracker:
         # Convert keypoints to integers
         keypoints = keypoints.round().to(torch.int)
         _frmTracks = []
+        self.frame_keypoints[crnt_frm_idx] = []
 
         if crnt_frm_idx == 0:
             # Initialize tracks with the first frame's keypoint
@@ -140,6 +145,7 @@ class FeatureTracker:
                 self.global_keyp_trackId_dic[tuple(kp)] = self.track_id
                 _frmTracks.append(self.track_id)
                 self.track_id += 1
+                self.frame_keypoints[crnt_frm_idx].append(kp)
         else:
             # Match features with the previous frame
             matches01 = self.matcher({"image0": self.prev_feats, "image1": feats})
@@ -170,6 +176,7 @@ class FeatureTracker:
                     #                             (crnt_frm_idx, tuple(current_kp)))
                     _new_keyp_trackId_dic[tuple(current_kp)] = _track_id_idx                
                     _frmTracks.append(_track_id_idx)
+                    self.frame_keypoints[crnt_frm_idx].append(current_kp)
                 else:
                     print(self.track_id, crnt_frm_idx-1, tuple(prev_kp), "track id not found")
 
@@ -196,20 +203,21 @@ class FeatureTracker:
         return self.tracks, self.kpMvmt, image_cv2, _frmTracks
 
     def update_cvFrame(self, _cpTracks, _frameData, _frmTrackIds, desRec, _isOnline = False):
-
+        
         _cvFrame = _frameData
         if _isOnline:
             _cvFrame = cv2.imdecode(np.frombuffer(_frameData, np.uint8), cv2.IMREAD_COLOR)
         # First, filter out tracks with less than 3 keypoints to avoid modifying the dictionary during iteration
         
         for i, trackId in enumerate(_frmTrackIds):
-            frm_keypoints = _cpTracks[trackId]        
+            frm_keypoints = _cpTracks[trackId]
+            color = self.trackColors[trackId % 40]        
             # for idx, (frm, keypoint) in enumerate(frm_keypoints):
             for idx in range(len(frm_keypoints)):
                 if idx == len(frm_keypoints)-1:
-                    cv2.circle(_cvFrame, frm_keypoints[idx][1], 5, (255, 0, 0), -1)
+                    cv2.circle(_cvFrame, frm_keypoints[idx][1], 5, color, -1)
                 else:
-                    cv2.line(_cvFrame, frm_keypoints[idx][1], frm_keypoints[idx+1][1], (0, 255, 0), 2)
+                    cv2.line(_cvFrame, frm_keypoints[idx][1], frm_keypoints[idx+1][1], color, 2)
             # print(idx)
             # for idp, _ , _ in enumerate(cp)
         return _cvFrame
