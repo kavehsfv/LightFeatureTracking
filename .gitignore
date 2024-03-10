@@ -18,7 +18,10 @@ __pycache__/
 *.avi
 # C extensions
 *.so
-
+*.sh
+*.xml
+*.ply
+*.csv
 # Distribution / packaging
 .Python
 build/

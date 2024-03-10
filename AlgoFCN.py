@@ -29,7 +29,7 @@ class FeatureTracker:
         self.prev_feats = None
         self.kpMvmt = 0
         self.last_cropCoords = (0, 0, 0, 0)
-        self.trackColors = self.generate_distinct_colors(40)
+        self.trackColors = self.generate_manual_colors()
 
     def detect_features(self, frame):
         feats = self.extractor.extract(frame.to(self.device))
@@ -120,6 +120,16 @@ class FeatureTracker:
             rgb_255 = tuple(int(c * 255) for c in rgb)
             colors.append(rgb_255)
         return colors
+    def generate_manual_colors(self):
+        colors = [
+            (0, 255, 255),  # Yellow (BGR format)
+            (0, 255, 0),    # Green (BGR format)
+            (0, 0, 255),    # Red (BGR format)
+            (255, 0, 0),    # Blue (BGR format)
+            (255, 0, 255),  # Purple (BGR format)
+            (0, 165, 255)   # Orange (BGR format)
+        ]
+        return colors
 
     def process_frame(self, frameData, crnt_frm_idx, cropCoords, isOnline):
         if cropCoords == None:
@@ -132,7 +142,7 @@ class FeatureTracker:
 
         keypoints, feats = self.detect_features(frame)
         # Convert keypoints to integers
-        keypoints = keypoints.round().to(torch.int)
+        # keypoints = keypoints.round().to(torch.int)
         _frmTracks = []
         self.frame_keypoints[crnt_frm_idx] = []
 
@@ -143,7 +153,7 @@ class FeatureTracker:
                 self.tracks[self.track_id] = [(crnt_frm_idx, tuple(kp))]
                 # self.keyp_trackId_dic[(crnt_frm_idx, tuple(kp))] = self.track_id
                 self.global_keyp_trackId_dic[tuple(kp)] = self.track_id
-                _frmTracks.append(self.track_id)
+                # _frmTracks.append(self.track_id)
                 self.track_id += 1
                 self.frame_keypoints[crnt_frm_idx].append(kp)
         else:
@@ -191,11 +201,14 @@ class FeatureTracker:
                 self.track_id += 1
             
             matched_indices0 = set(matches[..., 0].tolist())
-            notMatchKPs0 = [kp.tolist() for idx, kp in enumerate(keypoints) if idx not in matched_indices0]
+            notMatchKPs0 = [kp.tolist() for idx, kp in enumerate(self.prev_keypoints) if idx not in matched_indices0]
 
             for nmkp in notMatchKPs0:
-                # _new_keyp_trackId_dic[tuple(nmkp)] = self.track_id
-                _new_keyp_trackId_dic.pop(self.track_id, None)
+                _track_id_idx = self.global_keyp_trackId_dic.get(tuple(nmkp), None)
+                if _track_id_idx != None:
+                    self.global_keyp_trackId_dic.pop(tuple(nmkp))
+                # self.tracks.pop(_track_id_idx)
+                # _frmTracks = [x for x in _frmTracks if x != _track_id_idx]
 
             self.global_keyp_trackId_dic = _new_keyp_trackId_dic
         
@@ -211,40 +224,41 @@ class FeatureTracker:
         
         for i, trackId in enumerate(_frmTrackIds):
             frm_keypoints = _cpTracks[trackId]
-            color = self.trackColors[trackId % 40]        
-            # for idx, (frm, keypoint) in enumerate(frm_keypoints):
-            for idx in range(len(frm_keypoints)):
-                if idx == len(frm_keypoints)-1:
-                    cv2.circle(_cvFrame, frm_keypoints[idx][1], 5, color, -1)
-                else:
-                    cv2.line(_cvFrame, frm_keypoints[idx][1], frm_keypoints[idx+1][1], color, 2)
+            if len(frm_keypoints) > 2:
+                color = self.trackColors[trackId % len(self.trackColors)]        
+                # for idx, (frm, keypoint) in enumerate(frm_keypoints):
+                for idx in range(len(frm_keypoints)):
+                    if idx == len(frm_keypoints)-1:
+                        cv2.circle(_cvFrame, self.toInt(frm_keypoints[idx][1]), 3, color, -1)
+                    else:
+                        cv2.line(_cvFrame, self.toInt(frm_keypoints[idx][1]), self.toInt(frm_keypoints[idx+1][1]), color, 2)
             # print(idx)
             # for idp, _ , _ in enumerate(cp)
         return _cvFrame
-        _cpTracks = {key: value for key, value in _cpTracks.items() if len(value) >= 3}
-        # Now, process the tracks for drawing
-        for _track_id, _keypoints in _cpTracks.items():
-            # Pre-compute the existence of the current frame in keypoints to avoid repeated checks
-            current_frame_exists = any(f == _crnt_frm_idx for f, _ in _keypoints)
+        # _cpTracks = {key: value for key, value in _cpTracks.items() if len(value) >= 3}
+        # # Now, process the tracks for drawing
+        # for _track_id, _keypoints in _cpTracks.items():
+        #     # Pre-compute the existence of the current frame in keypoints to avoid repeated checks
+        #     current_frame_exists = any(f == _crnt_frm_idx for f, _ in _keypoints)
 
-            # If the current frame doesn't exist in the keypoints, skip further processing for this track
-            if not current_frame_exists:
-                continue
+        #     # If the current frame doesn't exist in the keypoints, skip further processing for this track
+        #     if not current_frame_exists:
+        #         continue
 
-            # Draw each track on the frame
-            for f, point in _keypoints:
-                if f == _crnt_frm_idx:  # Check if the keypoint belongs to the current frame
-                    cv2.circle(_cvFrame, point, 5, (0, 255, 0), -1)  # Draw the keypoint
+        #     # Draw each track on the frame
+        #     for f, point in _keypoints:
+        #         if f == _crnt_frm_idx:  # Check if the keypoint belongs to the current frame
+        #             cv2.circle(_cvFrame, point, 5, (0, 255, 0), -1)  # Draw the keypoint
 
-            # Draw lines between keypoints of the same track
-            for kp_idx in range(1, len(_keypoints)):
-                f, point = _keypoints[kp_idx]
-                if f <= _crnt_frm_idx:
-                    start_point = _keypoints[kp_idx-1][1]
-                    end_point = point
-                    cv2.line(_cvFrame, start_point, end_point, (255, 0, 0), 2)
+        #     # Draw lines between keypoints of the same track
+        #     for kp_idx in range(1, len(_keypoints)):
+        #         f, point = _keypoints[kp_idx]
+        #         if f <= _crnt_frm_idx:
+        #             start_point = _keypoints[kp_idx-1][1]
+        #             end_point = point
+        #             cv2.line(_cvFrame, start_point, end_point, (255, 0, 0), 2)
 
-        return _cvFrame
+        # return _cvFrame
 
     def set_extractor_matcher(self, ftExtractor, mx_keypoints):
         extractor, matcher = None, None
@@ -268,6 +282,9 @@ class FeatureTracker:
             raise RuntimeError("Invalid feature extractor. Please use 'aliked' or 'superpoint'.")
         
         return extractor, matcher
+
+    def toInt(self, floatTuple):
+        return tuple(int(x) for x in floatTuple)
 
 #*******************
 ######################
