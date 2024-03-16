@@ -10,6 +10,8 @@
 /assets/exp2/
 /assets/img_horse/
 /CNT_Imgs/
+/results/
+/trackingPerformanceEvaluation/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

@@ -12,22 +12,19 @@ import time
 import FNCs
 import colorsys
 import sys
+import math
 
 class FeatureTracker:
     def __init__(self, ftExtractor = 'aliked', mx_keypoints = 1024, desired_device = 3, device=None):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if device is None else device
-        # self.extractor = ALIKED(max_num_keypoints=1024).eval().to(self.device)
-        # self.matcher = LightGlue(features="aliked").eval().to(self.device)
+        self.device = self.setDevice(desired_device)
         self.extractor, self.matcher = self.set_extractor_matcher(ftExtractor, mx_keypoints)
         self.frame_keypoints = {}
-
         self.tracks = {}
         self.keyp_trackId_dic = {}
         self.global_keyp_trackId_dic = {}
         self.track_id = 0
         self.prev_keypoints = None
         self.prev_feats = None
-        self.kpMvmt = 0
         self.last_cropCoords = (0, 0, 0, 0)
         self.trackColors = self.generate_manual_colors()
 
@@ -37,78 +34,7 @@ class FeatureTracker:
         keypoints = feats_rbd["keypoints"]
         return keypoints, feats
 
-    def process_frame__old(self, frameData, crnt_frm_idx, cropCoords):
-        cropCoords =(cropCoords[0], cropCoords[1], cropCoords[2], cropCoords[3])
-
-        # # Check if cropCoords has changed since the last frame processed
-        # if cropCoords != self.last_cropCoords:
-        #     self.tracks = {}  # Reset tracks
-        #     self.track_id = 0  # Reset track_id as well, assuming you're starting fresh with tracking
-        #     self.last_cropCoords = cropCoords  # Update last_cropCoords to the current one
-
-        frame = FNCs.load_data_image_crop(frameData, crop=cropCoords)
-        keypoints, feats = self.detect_features(frame)
-        # Convert keypoints to integers
-        keypoints = keypoints.round().to(torch.int)
-
-        if crnt_frm_idx == 0:
-            # Initialize tracks with the first frame's keypoints
-            for kp in keypoints:
-                kp = kp.tolist()
-                self.tracks[self.track_id] = [(crnt_frm_idx, tuple(kp))]
-                # self.keyp_trackId_dic[(crnt_frm_idx, tuple(kp))] = self.track_id
-                self.global_keyp_trackId_dic[tuple(kp)] = self.track_id
-                self.track_id += 1
-
-        else:
-            # Match features with the previous frame
-            matches01 = self.matcher({"image0": self.prev_feats, "image1": feats})
-            matches01 = rbd(matches01)
-            matches = matches01["matches"]
-            m_kpts0, m_kpts1 = self.prev_keypoints[matches[..., 0]], keypoints[matches[..., 1]]
-
-            differences = m_kpts0 - m_kpts1
-            differences_np = differences.cpu().numpy()  # Minimize transfers
-
-            # Compute movement statistics
-            avg_change = differences_np.mean(axis=0)
-            self.kpMvmt = avg_change[1]
-
-            m_kpts0, m_kpts1 = m_kpts0.tolist(), m_kpts1.tolist()
-            # Update tracks with matched features
-            _new_keyp_trackId_dic = {}
-            for match_idx, (prev_kp_idx, current_kp_idx) in enumerate(matches):
-                prev_kp = self.prev_keypoints[prev_kp_idx].tolist()  # Convert to tuple to use as dictionary key
-                current_kp = keypoints[current_kp_idx].tolist() # Matched keypoint in the current frame
-
-                # _track_id_idx = self.keyp_trackId_dic.get((crnt_frm_idx-1, tuple(prev_kp)), None)
-                _track_id_idx = self.global_keyp_trackId_dic.get(tuple(prev_kp), None)
-
-                if (_track_id_idx is not None):
-
-                    self.tracks[_track_id_idx].append((crnt_frm_idx, tuple(current_kp)))
-                    # FNCs.replace_key(self.keyp_trackId_dic, (crnt_frm_idx-1, tuple(prev_kp)),
-                    #                             (crnt_frm_idx, tuple(current_kp)))
-                    _new_keyp_trackId_dic[tuple(current_kp)] = _track_id_idx                
-
-                else:
-                    print(self.track_id, crnt_frm_idx-1, tuple(prev_kp), "track id not found")
-            
-            matched_indices = set(matches[..., 1].tolist())
-            notMatchKPs = [kp.tolist() for idx, kp in enumerate(keypoints) if idx not in matched_indices]
-
-            for nmkp in notMatchKPs:
-                self.tracks[self.track_id] = [(crnt_frm_idx, tuple(nmkp))]
-                # self.keyp_trackId_dic[(crnt_frm_idx, tuple(nmkp))] = self.track_id
-                _new_keyp_trackId_dic[tuple(nmkp)] = self.track_id
-                self.track_id += 1
-            
-            self.global_keyp_trackId_dic = _new_keyp_trackId_dic
-            
-        self.prev_keypoints, self.prev_feats = keypoints, feats
-
-        return self.tracks, self.kpMvmt
-
+ 
     def generate_distinct_colors(self, n):
         colors = []
         for i in range(n):
@@ -144,6 +70,7 @@ class FeatureTracker:
         # Convert keypoints to integers
         # keypoints = keypoints.round().to(torch.int)
         _frmTracks = []
+        kp_lent_ornt_list = []
         self.frame_keypoints[crnt_frm_idx] = []
 
         if crnt_frm_idx == 0:
@@ -162,11 +89,11 @@ class FeatureTracker:
             matches01 = rbd(matches01)
             matches = matches01["matches"]
             m_kpts0, m_kpts1 = self.prev_keypoints[matches[..., 0]], keypoints[matches[..., 1]]
-            differences_np = (m_kpts0 - m_kpts1).cpu().numpy()  # Minimize transfers
+            # differences_np = (m_kpts0 - m_kpts1).cpu().numpy()  # Minimize transfers
 
-            # Compute movement statistics
-            avg_change = differences_np.mean(axis=0)
-            self.kpMvmt = avg_change[1]
+            # # Compute movement statistics
+            # avg_change = differences_np.mean(axis=0)
+            # self.kpMvmt = avg_change[1]
 
             # m_kpts0, m_kpts1 = m_kpts0.tolist(), m_kpts1.tolist()
             # Update tracks with matched features
@@ -176,6 +103,8 @@ class FeatureTracker:
 
                 prev_kp = self.prev_keypoints[prev_kp_idx].tolist()  # Convert to tuple to use as dictionary key
                 current_kp = keypoints[current_kp_idx].tolist() # Matched keypoint in the current frame
+
+                kp_lent_ornt_list.append(self.calc_lent_Ornt(prev_kp, current_kp))
 
                 # _track_id_idx = self.keyp_trackId_dic.get((crnt_frm_idx-1, tuple(prev_kp)), None)
 
@@ -213,7 +142,7 @@ class FeatureTracker:
             self.global_keyp_trackId_dic = _new_keyp_trackId_dic
         
         self.prev_keypoints, self.prev_feats = keypoints, feats
-        return self.tracks, self.kpMvmt, image_cv2, _frmTracks
+        return self.tracks, kp_lent_ornt_list, image_cv2, _frmTracks
 
     def update_cvFrame(self, _cpTracks, _frameData, _frmTrackIds, desRec, _isOnline = False):
         
@@ -224,16 +153,22 @@ class FeatureTracker:
         
         for i, trackId in enumerate(_frmTrackIds):
             frm_keypoints = _cpTracks[trackId]
+
             if len(frm_keypoints) > 2:
-                color = self.trackColors[trackId % len(self.trackColors)]        
-                # for idx, (frm, keypoint) in enumerate(frm_keypoints):
-                for idx in range(len(frm_keypoints)):
-                    if idx == len(frm_keypoints)-1:
-                        cv2.circle(_cvFrame, self.toInt(frm_keypoints[idx][1]), 3, color, -1)
-                    else:
-                        cv2.line(_cvFrame, self.toInt(frm_keypoints[idx][1]), self.toInt(frm_keypoints[idx+1][1]), color, 2)
-            # print(idx)
-            # for idp, _ , _ in enumerate(cp)
+                color = self.trackColors[trackId % len(self.trackColors)]
+
+                # Iterate until the second-to-last item to avoid IndexError
+                for idx in range(len(frm_keypoints) - 1):
+                    startPoint = self.toInt(frm_keypoints[idx][1])
+                    endPoint = self.toInt(frm_keypoints[idx + 1][1])
+
+                    # Draw line for all but the last point, where a circle will be drawn
+                    # cv2.line(_cvFrame, startPoint, endPoint, color, 2)
+                    cv2.arrowedLine(_cvFrame, startPoint, endPoint, color, 2, tipLength=0.1)
+                # Draw a circle at the last point
+                lastPoint = self.toInt(frm_keypoints[-1][1])
+                cv2.circle(_cvFrame, lastPoint, 3, color, -1)
+
         return _cvFrame
         # _cpTracks = {key: value for key, value in _cpTracks.items() if len(value) >= 3}
         # # Now, process the tracks for drawing
@@ -285,6 +220,33 @@ class FeatureTracker:
 
     def toInt(self, floatTuple):
         return tuple(int(x) for x in floatTuple)
+    
+    def setDevice(self, desired_device):
+        device = None
+        if torch.cuda.is_available():
+            desired_device = 0  # Set this to your desired device index
+            if desired_device < torch.cuda.device_count():
+                device = torch.device(f"cuda:{desired_device}")
+            else:
+                print(f"Warning: Desired device cuda:{desired_device} is not available.")
+                device = torch.device("cuda")
+        else:
+            device = torch.device("cpu")
+        
+        return device
+        
+    def calc_lent_Ornt(self, prevKP, curnKP):
+        x0, y0, x1, y1 = prevKP[0], prevKP[1], curnKP[0], curnKP[1]
+        
+        delta_x = x1 - x0
+        delta_y = y0 - y1  # Inverting Y-axis because origin is top-left
+        angle = math.atan2(delta_x, delta_y)  # Swap x and y for angle with vertical axis
+        # if angle < 0:
+        #     angle += 2 * math.pi
+
+        lent = math.sqrt((x1 - x0)**2 + (y1 - y0)**2)
+
+        return lent, angle
 
 #*******************
 ######################
@@ -401,3 +363,75 @@ class FeatureTracker:
 #                 cv2.line(cvFrame, start_point, end_point, (255, 0, 0), 2)
 
 #     return cvFrame
+
+    def process_frame__old(self, frameData, crnt_frm_idx, cropCoords):
+        cropCoords =(cropCoords[0], cropCoords[1], cropCoords[2], cropCoords[3])
+
+        # # Check if cropCoords has changed since the last frame processed
+        # if cropCoords != self.last_cropCoords:
+        #     self.tracks = {}  # Reset tracks
+        #     self.track_id = 0  # Reset track_id as well, assuming you're starting fresh with tracking
+        #     self.last_cropCoords = cropCoords  # Update last_cropCoords to the current one
+
+        frame = FNCs.load_data_image_crop(frameData, crop=cropCoords)
+        keypoints, feats = self.detect_features(frame)
+        # Convert keypoints to integers
+        keypoints = keypoints.round().to(torch.int)
+
+        if crnt_frm_idx == 0:
+            # Initialize tracks with the first frame's keypoints
+            for kp in keypoints:
+                kp = kp.tolist()
+                self.tracks[self.track_id] = [(crnt_frm_idx, tuple(kp))]
+                # self.keyp_trackId_dic[(crnt_frm_idx, tuple(kp))] = self.track_id
+                self.global_keyp_trackId_dic[tuple(kp)] = self.track_id
+                self.track_id += 1
+
+        else:
+            # Match features with the previous frame
+            matches01 = self.matcher({"image0": self.prev_feats, "image1": feats})
+            matches01 = rbd(matches01)
+            matches = matches01["matches"]
+            m_kpts0, m_kpts1 = self.prev_keypoints[matches[..., 0]], keypoints[matches[..., 1]]
+
+            differences = m_kpts0 - m_kpts1
+            differences_np = differences.cpu().numpy()  # Minimize transfers
+
+            # Compute movement statistics
+            avg_change = differences_np.mean(axis=0)
+            self.kpMvmt = avg_change[1]
+
+            m_kpts0, m_kpts1 = m_kpts0.tolist(), m_kpts1.tolist()
+            # Update tracks with matched features
+            _new_keyp_trackId_dic = {}
+            for match_idx, (prev_kp_idx, current_kp_idx) in enumerate(matches):
+                prev_kp = self.prev_keypoints[prev_kp_idx].tolist()  # Convert to tuple to use as dictionary key
+                current_kp = keypoints[current_kp_idx].tolist() # Matched keypoint in the current frame
+
+                # _track_id_idx = self.keyp_trackId_dic.get((crnt_frm_idx-1, tuple(prev_kp)), None)
+                _track_id_idx = self.global_keyp_trackId_dic.get(tuple(prev_kp), None)
+
+                if (_track_id_idx is not None):
+
+                    self.tracks[_track_id_idx].append((crnt_frm_idx, tuple(current_kp)))
+                    # FNCs.replace_key(self.keyp_trackId_dic, (crnt_frm_idx-1, tuple(prev_kp)),
+                    #                             (crnt_frm_idx, tuple(current_kp)))
+                    _new_keyp_trackId_dic[tuple(current_kp)] = _track_id_idx                
+
+                else:
+                    print(self.track_id, crnt_frm_idx-1, tuple(prev_kp), "track id not found")
+            
+            matched_indices = set(matches[..., 1].tolist())
+            notMatchKPs = [kp.tolist() for idx, kp in enumerate(keypoints) if idx not in matched_indices]
+
+            for nmkp in notMatchKPs:
+                self.tracks[self.track_id] = [(crnt_frm_idx, tuple(nmkp))]
+                # self.keyp_trackId_dic[(crnt_frm_idx, tuple(nmkp))] = self.track_id
+                _new_keyp_trackId_dic[tuple(nmkp)] = self.track_id
+                self.track_id += 1
+            
+            self.global_keyp_trackId_dic = _new_keyp_trackId_dic
+            
+        self.prev_keypoints, self.prev_feats = keypoints, feats
+
+        return self.tracks, self.kpMvmt
