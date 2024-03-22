@@ -26,6 +26,7 @@ __pycache__/
 *.csv
 *.jpg
 *.png
+/exp2_gf_clahe/
 # Distribution / packaging
 .Python
 build/
