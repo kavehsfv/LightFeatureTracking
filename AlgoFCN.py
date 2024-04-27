@@ -149,9 +149,9 @@ class FeatureTracker:
         
         self.prev_keypoints, self.prev_feats = keypoints, feats
 
-        __frameGrowthingTracks = self.newFrameGrowthingTrack(kp_lent_ornt_deltaXY_list, _frmTracks,
-                                                              self.tracks, self.avg_delta_xy)
-
+        # __frameGrowthingTracks = self.newFrameGrowthingTrack(kp_lent_ornt_deltaXY_list, _frmTracks,
+        #                                                       self.tracks, self.avg_delta_xy)
+        __frameGrowthingTracks = None
         return self.tracks, kp_lent_ornt_deltaXY_list, image_cv2, _frmTracks, __frameGrowthingTracks
 
     def update_cvFrame(self, _cpTracks, _frameData, _frmTrackIds, desRec, _isOnline = False):
