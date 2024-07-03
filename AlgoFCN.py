@@ -37,7 +37,6 @@ class FeatureTracker:
         feats_rbd = rbd(copy.deepcopy(feats))
         keypoints = feats_rbd["keypoints"]
         return keypoints, feats
-
  
     def generate_distinct_colors(self, n):
         colors = []
@@ -50,6 +49,7 @@ class FeatureTracker:
             rgb_255 = tuple(int(c * 255) for c in rgb)
             colors.append(rgb_255)
         return colors
+    
     def generate_manual_colors(self):
         colors = [
             (0, 255, 255),  # Yellow (BGR format)
@@ -210,7 +210,7 @@ class FeatureTracker:
     def setDevice(self, desired_device):
         device = None
         if torch.cuda.is_available():
-            desired_device = 0  # Set this to your desired device index
+            # desired_device = 0  # Set this to your desired device index
             if desired_device < torch.cuda.device_count():
                 device = torch.device(f"cuda:{desired_device}")
             else:
@@ -218,7 +218,7 @@ class FeatureTracker:
                 device = torch.device("cuda")
         else:
             device = torch.device("cpu")
-        
+        print(device)
         return device
         
     def calc_lent_Ornt_deltaXY(self, prevKP, curnKP):
