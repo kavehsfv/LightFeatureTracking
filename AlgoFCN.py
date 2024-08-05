@@ -93,13 +93,17 @@ class FeatureTracker:
             matches01 = rbd(matches01)
             matches = matches01["matches"]
             m_kpts0, m_kpts1 = self.prev_keypoints[matches[..., 0]], keypoints[matches[..., 1]]
-            # differences_np = (m_kpts0 - m_kpts1).cpu().numpy()  # Minimize transfers
 
-            # # Compute movement statistics
-            # avg_change = differences_np.mean(axis=0)
-            # self.kpMvmt = avg_change[1]
+            # Calculate distances for each matched keypoint pair
+            distances = np.linalg.norm(m_kpts0.to('cpu') - m_kpts1.to('cpu'), axis=1)
+            mean_distance = distances.mean()
+            max_allowed_distance = 3 * mean_distance
+            
+            # Filter matches based on the threshold
+            valid_matches = distances <= max_allowed_distance
+            matches = matches[valid_matches]
+            # m_kpts0, m_kpts1 = m_kpts0[valid_matches], m_kpts1[valid_matches]
 
-            # m_kpts0, m_kpts1 = m_kpts0.tolist(), m_kpts1.tolist()
             # Update tracks with matched features
             _new_keyp_trackId_dic = {}
 
@@ -154,13 +158,13 @@ class FeatureTracker:
         __frameGrowthingTracks = None
         return self.tracks, kp_lent_ornt_deltaXY_list, image_cv2, _frmTracks, __frameGrowthingTracks
 
-    def update_cvFrame(self, _cpTracks, _frameData, _frmTrackIds, desRec, _isOnline = False):
+    def update_cvFrame(self, crnt_frm_idx, _cpTracks, _frameData, _frmTrackIds, desRec, _isOnline = False):
         
         _cvFrame = _frameData
         if _isOnline:
             _cvFrame = cv2.imdecode(np.frombuffer(_frameData, np.uint8), cv2.IMREAD_COLOR)
         # First, filter out tracks with less than 3 keypoints to avoid modifying the dictionary during iteration
-        
+        cornPoints = self.get_rect_corners(desRec)
         for i, trackId in enumerate(_frmTrackIds):
             frm_keypoints = _cpTracks[trackId]
 
@@ -171,15 +175,48 @@ class FeatureTracker:
                 for idx in range(len(frm_keypoints) - 1):
                     startPoint = self.toInt(frm_keypoints[idx][1])
                     endPoint = self.toInt(frm_keypoints[idx + 1][1])
-
+                    startPoint = (desRec[0] + startPoint[0], desRec[1] + startPoint[1])
+                    endPoint = (desRec[0] + endPoint[0], desRec[1] + endPoint[1])
                     # Draw line for all but the last point, where a circle will be drawn
-                    # cv2.line(_cvFrame, startPoint, endPoint, color, 2)
-                    cv2.arrowedLine(_cvFrame, startPoint, endPoint, color, 2, tipLength=0.1)
+                    cv2.line(_cvFrame, startPoint, endPoint, color, 2)
+                    # cv2.arrowedLine(_cvFrame, startPoint, endPoint, color, 2, tipLength=0.1)
                 # Draw a circle at the last point
                 lastPoint = self.toInt(frm_keypoints[-1][1])
+                lastPoint = (desRec[0] + lastPoint[0], desRec[1] + lastPoint[1])
                 cv2.circle(_cvFrame, lastPoint, 3, color, -1)
 
+        for i in range(4):
+            cv2.line(_cvFrame, cornPoints[i], cornPoints[(i+1)%4], (0, 255, 0), 4)
+
+        # Put Frame Number
+        # font = cv2.FONT_HERSHEY_SIMPLEX
+        # text = f"Frame: {crnt_frm_idx}"
+        # cv2.putText(_cvFrame, text, (10, 40), font, 1, (0, 165, 255), 2)
+
         return _cvFrame
+
+    def crop_points(self, center_x, center_y, side_length=1):
+        """
+        Returns:
+            list of 4 tuples: [(x1, y1), (x2, y2), (x3, y3), (x4, y4)]
+        """
+        half_side = side_length / 2
+        points = [
+            (int(center_x - half_side), int(center_y - half_side)),  # top-left
+            (int(center_x + half_side), int(center_y - half_side)),  # top-right
+            (int(center_x + half_side), int(center_y + half_side)),  # bottom-right
+            (int(center_x - half_side), int(center_y + half_side))  # bottom-left
+        ]
+        cropCoords = (points[0][0], points[0][1], points[2][0], points[2][1])
+        return cropCoords, points
+
+    def get_rect_corners(self, desRec):
+        x0, y0, x2, y2 = desRec
+        top_left = (x0, y0)
+        top_right = (x2, y0)
+        bottom_right = (x2, y2)
+        bottom_left= (x0, y2)
+        return top_left, top_right, bottom_right, bottom_left
 
     def set_extractor_matcher(self, ftExtractor, mx_keypoints):
         extractor, matcher = None, None
