@@ -97,7 +97,7 @@ class FeatureTracker:
             # Calculate distances for each matched keypoint pair
             distances = np.linalg.norm(m_kpts0.to('cpu') - m_kpts1.to('cpu'), axis=1)
             mean_distance = distances.mean()
-            max_allowed_distance = 3 * mean_distance
+            max_allowed_distance = 10 * mean_distance
             
             # Filter matches based on the threshold
             valid_matches = distances <= max_allowed_distance
