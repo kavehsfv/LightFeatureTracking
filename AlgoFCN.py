@@ -66,7 +66,7 @@ class FeatureTracker:
             cropCoords = (0, 0, 100000, 100000)
         cropCoords = tuple(cropCoords)
         if isOnline:
-            frame = FNCs.load_data_image_crop(frameData, crop=cropCoords)
+            frame, image_cv2 = FNCs.load_data_image_crop_mdfy(frameData, crop=cropCoords)
         else:
             frame, image_cv2 = load_image_crop(frameData, crop=cropCoords)
 
@@ -158,11 +158,10 @@ class FeatureTracker:
         __frameGrowthingTracks = None
         return self.tracks, kp_lent_ornt_deltaXY_list, image_cv2, _frmTracks, __frameGrowthingTracks
 
-    def update_cvFrame(self, crnt_frm_idx, _cpTracks, _frameData, _frmTrackIds, desRec, _isOnline = False):
+    def update_cvFrame(self, crnt_frm_idx, _cpTracks, _cvFrame, _frmTrackIds, desRec, _isOnline = False):
         
-        _cvFrame = _frameData
-        if _isOnline:
-            _cvFrame = cv2.imdecode(np.frombuffer(_frameData, np.uint8), cv2.IMREAD_COLOR)
+        # if _isOnline: #kaveh : because I have already loaded the image
+        #     _cvFrame = cv2.imdecode(np.frombuffer(_cvFrame, np.uint8), cv2.IMREAD_COLOR)
         # First, filter out tracks with less than 3 keypoints to avoid modifying the dictionary during iteration
         cornPoints = self.get_rect_corners(desRec)
         for i, trackId in enumerate(_frmTrackIds):

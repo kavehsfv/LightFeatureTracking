@@ -48,6 +48,38 @@ def load_data_image_crop(image_data: bytes, resize: Optional[Union[int, Tuple[in
 
     # Convert bytes data to a NumPy array
     image_array = cv2.imdecode(np.frombuffer(image_data, np.uint8), cv2.IMREAD_COLOR)
+    imageCV = image_array
+    # Crop the image if a crop section is provided
+    if crop is not None:
+        x1, y1, x2, y2 = crop
+        image_array = image_array[y1:y2, x1:x2]
+
+    # Resize the image if needed
+    if resize is not None:
+        if isinstance(resize, int):
+            resize = (resize, resize)  # Assuming square resize if only one dimension is provided
+        image_array = cv2.resize(image_array, resize)
+
+    # Convert the NumPy array to a torch.Tensor
+    return numpy_image_to_torch(image_array), imageCV[..., ::-1]
+
+
+def load_data_image_crop_mdfy(
+    image_data: bytes,
+    resize: Optional[Union[int, Tuple[int, int]]] = None,
+    crop: Optional[Tuple[int, int, int, int]] = None,
+    **kwargs
+) -> torch.Tensor:
+    """Process and crop the image as needed, then convert to a torch.Tensor"""
+
+    # Convert bytes data to a NumPy array
+    image_array = cv2.imdecode(np.frombuffer(image_data, np.uint8), cv2.IMREAD_COLOR)
+    
+    # **Add this line to convert BGR to RGB**
+    image_array = image_array[..., ::-1]
+
+    # Make a copy for imageCV after color conversion
+    imageCV = image_array.copy()
 
     # Crop the image if a crop section is provided
     if crop is not None:
@@ -61,5 +93,4 @@ def load_data_image_crop(image_data: bytes, resize: Optional[Union[int, Tuple[in
         image_array = cv2.resize(image_array, resize)
 
     # Convert the NumPy array to a torch.Tensor
-    return numpy_image_to_torch(image_array)
-
+    return numpy_image_to_torch(image_array), imageCV

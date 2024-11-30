@@ -137,18 +137,27 @@ class MainWindow(QMainWindow):
                                int(self.x_max_spinbox.value() * self.pixmap.width()),
                                int(self.y_max_spinbox.value() * self.pixmap.height())]
 
-        __cpTracks, __kpMvmt = self.tracker.process_frame(image_data, self.rcv_frame_counter, self.desired_coords)
-        self.rcvPacketDic[self.rcv_frame_counter] = (__cpTracks, image_data)
-        self.update_gr_plot_data(self.rcv_frame_counter, __kpMvmt)
+        tracks, kp_loxy_list, image_cv2, _frmTrackIds, _ = self.tracker.process_frame(image_data, self.rcv_frame_counter, self.desired_coords, True)
+
+        # cvFrame = self.tracker.update_cvFrame(self.rcv_frame_counter, tracks, image_cv2, _frmTracks, self.desired_coords, _isOnline = False)
+
+        self.rcvPacketDic[self.rcv_frame_counter] = (tracks, kp_loxy_list, image_cv2, _frmTrackIds)
+
+        growthRate = np.mean([item[3]*5 for item in kp_loxy_list])
+        if growthRate > 0:
+            growthRate = np.log(growthRate) #for better visualization
+        else:
+            growthRate = 0
+        self.update_gr_plot_data(self.rcv_frame_counter, growthRate) # kaveh: it is important to update the plot data here
         self.rcv_frame_counter +=1
 
     def start_timer(self):
         self.timer.start(1000)  # Timer set to 1 second for demonstration purposes
     
     def update_image(self):
-        __cpTracks, __imgData = {}, 0
+        tracks, image_cv2, _frmTrackIds, kp_loxy_list = None, None, None, None
         if self.display_frame_counter in self.rcvPacketDic:
-            __cpTracks, __imgData = self.rcvPacketDic[self.display_frame_counter]
+            tracks, kp_loxy_list, image_cv2, _frmTrackIds = self.rcvPacketDic[self.display_frame_counter]
         else:
             return
         
@@ -158,8 +167,9 @@ class MainWindow(QMainWindow):
             self.customPlot.xAxis.setRange(self.rcv_frame_counter - self.MAX_LEN_PLOT_X_AXES, self.rcv_frame_counter)
         self.customPlot.replot()
 
-        # Process the frame and get the processed image 
-        imgcp = self.update_cvFrame(__cpTracks, __imgData, self.display_frame_counter)
+        # Process the frame and get the processed image
+        imgcp = self.tracker.update_cvFrame(self.rcv_frame_counter, tracks, image_cv2, _frmTrackIds, self.desired_coords, _isOnline = True) 
+        # imgcp = self.update_cvFrame(__cpTracks, __imgData, self.display_frame_counter)
         # Conversion: Encode cvFrame to a format (e.g., PNG) and then convert to QByteArray
         _, buffer = cv2.imencode('.png', imgcp)  # Encode the image as PNG; adjust format as needed
         image_data_qba = QByteArray(buffer.tobytes())  # Convert buffer to QByteArray
@@ -186,13 +196,11 @@ class MainWindow(QMainWindow):
         self.display_frame_counter += 1
         return
     
-    def update_gr_plot_data(self, frameNo, newVerGrowthRate):
+    def update_gr_plot_data(self, frameNo, growthRate):
         # Add new data point
         self.xData.append(frameNo)  # Assuming display_frame_counter is your x-value
-        nmGrowthrate = 0
-        if newVerGrowthRate > 0:
-            nmGrowthrate = np.log(newVerGrowthRate * 5)
-        self.yData.append(nmGrowthrate) # conversion to nm and log scale 400px = 2um -> 1 px = 2um/400px = 5nm/px
+
+        self.yData.append(growthRate) 
         # Update the plot data
         if len(self.xData) >= self.MAX_LEN_PLOT_X_AXES:
             # Remove the oldest data point
@@ -305,9 +313,9 @@ class MainWindow(QMainWindow):
         self.y_max_spinbox.setSingleStep(0.05)   
 
         self.x_min_spinbox.setValue(0)        
-        self.y_min_spinbox.setValue(0.3)
+        self.y_min_spinbox.setValue(0)
         self.x_max_spinbox.setValue(1)        
-        self.y_max_spinbox.setValue(0.8) 
+        self.y_max_spinbox.setValue(0.5) 
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
