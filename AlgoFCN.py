@@ -69,7 +69,7 @@ class FeatureTracker:
             frame, image_cv2 = FNCs.load_data_image_crop_mdfy(frameData, crop=cropCoords)
         else:
             frame, image_cv2 = load_image_crop(frameData, crop=cropCoords)
-
+            
         keypoints, feats = self.detect_features(frame)
         # Convert keypoints to integers
         # keypoints = keypoints.round().to(torch.int)
@@ -98,7 +98,7 @@ class FeatureTracker:
             distances = np.linalg.norm(m_kpts0.to('cpu') - m_kpts1.to('cpu'), axis=1)
             mean_distance = distances.mean()
             max_allowed_distance = 10 * mean_distance
-            
+             
             # Filter matches based on the threshold
             valid_matches = distances <= max_allowed_distance
             matches = matches[valid_matches]
